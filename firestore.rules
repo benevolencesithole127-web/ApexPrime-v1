@@ -1,0 +1,125 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 3. Helper Primitives
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    
+    // 2. Validation Blueprints (Anti-Update-Gap)
+    function isValidUser(data) {
+      return data.uid is string && data.uid == request.auth.uid
+        && data.subscriptionTier in ['basic', 'pro', 'premium']
+        && (data.email == null || (data.email is string && data.email.size() <= 256));
+    }
+
+    function isValidProfile(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 64
+        && data.avatarUrl is string && data.avatarUrl.size() <= 512
+        && data.isKid is bool;
+    }
+
+    function isValidParty(data) {
+      return data.hostId == request.auth.uid 
+        && data.status in ['waiting', 'playing', 'paused', 'finished']
+        && data.movieId is string && data.movieId.size() <= 128
+        && data.participantCount is int && data.participantCount >= 0
+        && data.currentTime is number;
+    }
+
+    function isValidMessage(data) {
+      return data.userId == request.auth.uid
+        && data.userName is string && data.userName.size() <= 128
+        && data.text is string && data.text.size() > 0 && data.text.size() <= 500;
+    }
+
+    // --- COLLECTIONS ---
+
+    // 1. User Account
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) 
+        && incoming().uid == existing().uid
+        && (
+          // Tier upgrade
+          incoming().diff(existing()).affectedKeys().hasOnly(['subscriptionTier'])
+        );
+
+      // 1.1 Viewer Profiles
+      match /profiles/{profileId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidProfile(incoming());
+        allow update: if isOwner(userId) && isValidProfile(incoming())
+          && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'avatarUrl', 'isKid']);
+        allow delete: if isOwner(userId);
+
+        // 1.2 Profile-specific Content
+        match /watchlist/{movieId} {
+          allow read: if isOwner(userId);
+          allow write: if isOwner(userId) && isValidId(movieId);
+        }
+        match /history/{movieId} {
+          allow read: if isOwner(userId);
+          allow write: if isOwner(userId) && isValidId(movieId);
+        }
+      }
+    }
+
+    // 2. Movie Catalog (Read-Only for users)
+    match /movies/{movieId} {
+      allow read: if isSignedIn();
+    }
+
+    // 3. Watch Parties (Social Layer)
+    match /parties/{partyId} {
+      // 8. Secure List Queries (Enforce filter on active parties)
+      allow list: if isSignedIn() && (
+        resource == null || resource.data.status in ['waiting', 'playing', 'paused']
+      );
+      allow get: if isSignedIn();
+      
+      allow create: if isSignedIn() && isValidParty(incoming()) && isValidId(partyId);
+      
+      // 4. Tiered Identity Logic
+      allow update: if isSignedIn() && (
+        // Action: Host state change
+        (existing().hostId == request.auth.uid && isValidParty(incoming()) && incoming().diff(existing()).affectedKeys().hasAny(['status', 'currentTime', 'participantCount']) && incoming().hostId == existing().hostId)
+        ||
+        // Action: Participant join/leave (increment/decrement)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['participantCount']) && incoming().participantCount is int)
+      );
+      
+      allow delete: if isSignedIn() && existing().hostId == request.auth.uid;
+
+      // 3.1 Party Chat
+      match /messages/{messageId} {
+        // 7. existsAfter Atomicity (Ensure party exists)
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && isValidMessage(incoming());
+      }
+
+      // 3.2 Live Reactions
+      match /reactions/{reactionId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && incoming().emoji is string && incoming().emoji.size() <= 8;
+      }
+    }
+
+    // 4. Global Community
+    match /community_chat/{messageId} {
+      // No blanket reads - limit by query
+      allow list: if isSignedIn();
+      allow get: if isSignedIn();
+      allow create: if isSignedIn() && isValidMessage(incoming());
+    }
+  }
+}

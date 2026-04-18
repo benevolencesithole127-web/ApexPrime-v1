@@ -1,0 +1,130 @@
+{
+  "entities": {
+    "User": {
+      "title": "Account",
+      "description": "Main account details",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "subscriptionTier": { "type": "string", "enum": ["basic", "pro", "premium"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "subscriptionTier"]
+    },
+    "Profile": {
+      "title": "User Profile",
+      "description": "Individual viewer profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "isKid": { "type": "boolean" }
+      },
+      "required": ["id", "name", "avatarUrl"]
+    },
+    "Movie": {
+      "title": "Movie / Content",
+      "description": "Media content available for streaming",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "thumbnailUrl": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "genre": { "type": "string" },
+        "rating": { "type": "string" },
+        "year": { "type": "number" },
+        "duration": { "type": "string" },
+        "isPremium": { "type": "boolean" }
+      },
+      "required": ["title", "thumbnailUrl", "isPremium"]
+    },
+    "WatchlistItem": {
+      "title": "Watchlist Item",
+      "type": "object",
+      "properties": {
+        "movieId": { "type": "string" },
+        "addedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["movieId"]
+    },
+    "HistoryItem": {
+      "title": "History Item",
+      "type": "object",
+      "properties": {
+        "movieId": { "type": "string" },
+        "watchedAt": { "type": "string", "format": "date-time" },
+        "lastPosition": { "type": "number" }
+      },
+      "required": ["movieId"]
+    },
+    "WatchParty": {
+      "title": "Watch Party",
+      "type": "object",
+      "properties": {
+        "hostId": { "type": "string" },
+        "hostName": { "type": "string" },
+        "movieId": { "type": "string" },
+        "status": { "type": "string", "enum": ["waiting", "playing", "paused", "finished"] },
+        "currentTime": { "type": "number" },
+        "participantCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["hostId", "movieId", "status"]
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "type": "object",
+      "properties": {
+        "partyId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["partyId", "userId", "text"]
+    },
+    "CommunityMessage": {
+      "title": "Community Message",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "text"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Main account doc"
+    },
+    "/users/{userId}/profiles/{profileId}": {
+      "schema": "Profile",
+      "description": "Viewer profiles"
+    },
+    "/users/{userId}/profiles/{profileId}/watchlist/{movieId}": {
+      "schema": "WatchlistItem",
+      "description": "Personal watchlist"
+    },
+    "/users/{userId}/profiles/{profileId}/history/{movieId}": {
+      "schema": "HistoryItem",
+      "description": "Viewing history"
+    },
+    "/movies/{movieId}": {
+      "schema": "Movie",
+      "description": "Content catalog"
+    },
+    "/parties/{partyId}": {
+      "schema": "WatchParty"
+    },
+    "/community_chat/{messageId}": {
+      "schema": "CommunityMessage",
+      "description": "Global community chat"
+    }
+  }
+}
